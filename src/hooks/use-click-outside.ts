@@ -1,80 +1,74 @@
-"use client"
+import { useEffect, useRef } from "react";
 
-import { useEffect, useRef, RefObject } from "react"
+type RefObject<T> = React.RefObject<T | null>;
+type Ref<T> = React.Ref<T | null>;
 
-type UseClickOutsideOptions = {
-  handler: (event: MouseEvent | TouchEvent) => void
-  enabled?: boolean
-}
-
-export function useClickOutside<T extends HTMLElement>(
-  options: UseClickOutsideOptions
-): RefObject<T> {
-  const ref = useRef<T>(null)
-  const { handler, enabled = true } = options
-
-  useEffect(() => {
-    if (!enabled) return
-
-    const listener = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node
-
-      if (!ref.current || ref.current.contains(target)) {
-        return
-      }
-
-      handler(event)
-    }
-
-    document.addEventListener("mousedown", listener)
-    document.addEventListener("touchstart", listener)
-
-    return () => {
-      document.removeEventListener("mousedown", listener)
-      document.removeEventListener("touchstart", listener)
-    }
-  }, [handler, enabled])
-
-  return ref
-}
-
-export function useClickOutsideMultiple<T extends HTMLElement>(
-  handler: (event: MouseEvent | TouchEvent) => void,
-  enabled: boolean = true
-): RefObject<T>[] {
-  const refs = useRef<RefObject<T>[]>([])
-
-  useEffect(() => {
-    if (!enabled) return
-
-    const listener = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node
-
-      const isInside = refs.current.some(
-        (ref) => ref.current?.contains(target)
-      )
-
-      if (isInside) {
-        return
-      }
-
-      handler(event)
-    }
-
-    document.addEventListener("mousedown", listener)
-    document.addEventListener("touchstart", listener)
-
-    return () => {
-      document.removeEventListener("mousedown", listener)
-      document.removeEventListener("touchstart", listener)
-    }
-  }, [handler, enabled])
-
-  const addRef = (): RefObject<T> => {
-    const ref = { current: null } as RefObject<T>
-    refs.current.push(ref)
-    return ref
+export function useClickOutside<T extends HTMLElement = HTMLElement>(
+  handler: () => void,
+  options?: {
+    enabled?: boolean;
+    excludeRef?: RefObject<HTMLElement>;
   }
+): RefObject<T> {
+  const ref = useRef<T>(null);
+  const handlerRef = useRef(handler);
 
-  return [addRef(), addRef(), addRef()]
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
+  useEffect(() => {
+    if (options?.enabled === false) return;
+
+    const listener = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (!ref.current || ref.current.contains(target)) return;
+
+      if (options?.excludeRef?.current?.contains(target)) return;
+
+      handlerRef.current();
+    };
+
+    document.addEventListener("mousedown", listener);
+    document.addEventListener("touchstart", listener);
+
+    return () => {
+      document.removeEventListener("mousedown", listener);
+      document.removeEventListener("touchstart", listener);
+    };
+  }, [options?.enabled, options?.excludeRef]);
+
+  return ref;
+}
+
+export function useClickOutsideMultiple(
+  handler: () => void,
+  refs: React.RefObject<HTMLElement | null>[],
+  options?: { enabled?: boolean }
+): void {
+  const handlerRef = useRef(handler);
+
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
+  useEffect(() => {
+    if (options?.enabled === false) return;
+
+    const listener = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      const isInside = refs.some((ref) => ref.current?.contains(target));
+      if (!isInside) {
+        handlerRef.current();
+      }
+    };
+
+    document.addEventListener("mousedown", listener);
+    document.addEventListener("touchstart", listener);
+
+    return () => {
+      document.removeEventListener("mousedown", listener);
+      document.removeEventListener("touchstart", listener);
+    };
+  }, [refs, options?.enabled]);
 }

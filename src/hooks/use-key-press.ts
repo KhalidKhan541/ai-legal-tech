@@ -1,155 +1,150 @@
-"use client"
+import { useEffect, useRef, useCallback, useState } from "react";
 
-import { useEffect, useCallback, useRef } from "react"
-
-type KeyHandler = (event: KeyboardEvent) => void
-
-interface UseKeyPressOptions {
-  target?: EventTarget | null
-  enabled?: boolean
+export interface UseKeyPressOptions {
+  target?: EventTarget | null;
+  enabled?: boolean;
+  useCapture?: boolean;
 }
 
 export function useKeyPress(
   key: string,
-  handler: KeyHandler,
-  options: UseKeyPressOptions = {}
-) {
-  const { target = typeof window !== "undefined" ? window : null, enabled = true } = options
-  const handlerRef = useRef(handler)
-  handlerRef.current = handler
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key === key && enabled) {
-        handlerRef.current(event)
-      }
-    },
-    [key, enabled]
-  )
+  handler: (event: KeyboardEvent) => void,
+  options?: UseKeyPressOptions
+): void {
+  const handlerRef = useRef(handler);
+  const { target = typeof document !== "undefined" ? document : null, enabled = true, useCapture = true } = options ?? {};
 
   useEffect(() => {
-    if (!target) return
+    handlerRef.current = handler;
+  }, [handler]);
 
-    target.addEventListener("keydown", handleKeyDown as EventListener)
-    return () => target.removeEventListener("keydown", handleKeyDown as EventListener)
-  }, [target, handleKeyDown])
+  useEffect(() => {
+    if (!enabled || !target) return;
+
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === key) {
+        handlerRef.current(event);
+      }
+    };
+
+    target.addEventListener("keydown", listener, useCapture);
+    return () => target.removeEventListener("keydown", listener, useCapture);
+  }, [key, target, enabled, useCapture]);
 }
 
-export function useKeyPressMultiple(
-  keys: string[],
-  handler: KeyHandler,
-  options: UseKeyPressOptions = {}
-) {
-  const { target = typeof window !== "undefined" ? window : null, enabled = true } = options
-  const handlerRef = useRef(handler)
-  handlerRef.current = handler
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (keys.includes(event.key) && enabled) {
-        handlerRef.current(event)
-      }
-    },
-    [keys, enabled]
-  )
-
-  useEffect(() => {
-    if (!target) return
-
-    target.addEventListener("keydown", handleKeyDown as EventListener)
-    return () => target.removeEventListener("keydown", handleKeyDown as EventListener)
-  }, [target, handleKeyDown])
+export function useKeyDown(
+  key: string,
+  handler: (event: KeyboardEvent) => void,
+  options?: UseKeyPressOptions
+): void {
+  useKeyPress(key, handler, options);
 }
 
-export function useKeyboardShortcuts(
-  shortcuts: Record<string, KeyHandler>,
-  options: UseKeyPressOptions = {}
-) {
-  const { target = typeof window !== "undefined" ? window : null, enabled = true } = options
-  const shortcutsRef = useRef(shortcuts)
-  shortcutsRef.current = shortcuts
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (!enabled) return
-
-      const key = event.key.toLowerCase()
-      const modifiers: string[] = []
-
-      if (event.ctrlKey || event.metaKey) modifiers.push("ctrl")
-      if (event.shiftKey) modifiers.push("shift")
-      if (event.altKey) modifiers.push("alt")
-
-      const shortcutKey = [...modifiers, key].join("+")
-      const handler = shortcutsRef.current[shortcutKey]
-
-      if (handler) {
-        event.preventDefault()
-        handler(event)
-      }
-    },
-    [enabled]
-  )
+export function useKeyUp(
+  key: string,
+  handler: (event: KeyboardEvent) => void,
+  options?: UseKeyPressOptions
+): void {
+  const handlerRef = useRef(handler);
+  const { target = typeof document !== "undefined" ? document : null, enabled = true, useCapture = true } = options ?? {};
 
   useEffect(() => {
-    if (!target) return
+    handlerRef.current = handler;
+  }, [handler]);
 
-    target.addEventListener("keydown", handleKeyDown as EventListener)
-    return () => target.removeEventListener("keydown", handleKeyDown as EventListener)
-  }, [target, handleKeyDown])
+  useEffect(() => {
+    if (!enabled || !target) return;
+
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === key) {
+        handlerRef.current(event);
+      }
+    };
+
+    target.addEventListener("keyup", listener, useCapture);
+    return () => target.removeEventListener("keyup", listener, useCapture);
+  }, [key, target, enabled, useCapture]);
 }
 
-export function useHotkey(
-  combo: string,
-  handler: KeyHandler,
-  options: UseKeyPressOptions = {}
-) {
-  const parseCombo = (combo: string) => {
-    const parts = combo.toLowerCase().split("+")
-    return {
-      ctrl: parts.includes("ctrl") || parts.includes("meta"),
-      shift: parts.includes("shift"),
-      alt: parts.includes("alt"),
-      key: parts.filter(
-        (p) => !["ctrl", "meta", "shift", "alt"].includes(p)
-      )[0],
-    }
-  }
-
-  const { target = typeof window !== "undefined" ? window : null, enabled = true } = options
-  const handlerRef = useRef(handler)
-  handlerRef.current = handler
-  const comboRef = useRef(parseCombo(combo))
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (!enabled) return
-
-      const { ctrl, shift, alt, key } = comboRef.current
-
-      if (
-        (ctrl && !(event.ctrlKey || event.metaKey)) ||
-        (!ctrl && (event.ctrlKey || event.metaKey)) ||
-        (shift && !event.shiftKey) ||
-        (!shift && event.shiftKey) ||
-        (alt && !event.altKey) ||
-        (!alt && event.altKey)
-      ) {
-        return
-      }
-
-      if (event.key.toLowerCase() === key) {
-        event.preventDefault()
-        handlerRef.current(event)
-      }
-    },
-    [enabled]
-  )
+export function useHotkeys(
+  hotkeys: Array<{ key: string; handler: (event: KeyboardEvent) => void; modifiers?: string[] }>,
+  options?: UseKeyPressOptions
+): void {
+  const hotkeysRef = useRef(hotkeys);
+  const { target = typeof document !== "undefined" ? document : null, enabled = true, useCapture = true } = options ?? {};
 
   useEffect(() => {
-    if (!target) return
+    hotkeysRef.current = hotkeys;
+  }, [hotkeys]);
 
-    target.addEventListener("keydown", handleKeyDown as EventListener)
-    return () => target.removeEventListener("keydown", handleKeyDown as EventListener)
-  }, [target, handleKeyDown])
+  useEffect(() => {
+    if (!enabled || !target) return;
+
+    const listener = (event: KeyboardEvent) => {
+      for (const hotkey of hotkeysRef.current) {
+        const keyMatch = event.key.toLowerCase() === hotkey.key.toLowerCase();
+        if (!keyMatch) continue;
+
+        const modifiersMatch = hotkey.modifiers?.every((mod) => {
+          switch (mod.toLowerCase()) {
+            case "ctrl":
+            case "control":
+              return event.ctrlKey;
+            case "shift":
+              return event.shiftKey;
+            case "alt":
+              return event.altKey;
+            case "meta":
+            case "cmd":
+            case "command":
+              return event.metaKey;
+            default:
+              return true;
+          }
+        });
+
+        if (hotkey.modifiers ? modifiersMatch : true) {
+          event.preventDefault();
+          hotkey.handler(event);
+          return;
+        }
+      }
+    };
+
+    target.addEventListener("keydown", listener, useCapture);
+    return () => target.removeEventListener("keydown", listener, useCapture);
+  }, [target, enabled, useCapture]);
+}
+
+export function useKeyboardCombination(
+  combination: string,
+  handler: (event: KeyboardEvent) => void,
+  options?: UseKeyPressOptions
+): void {
+  const parts = combination.toLowerCase().split("+").map((s) => s.trim());
+  const key = parts[parts.length - 1]!;
+  const modifiers = parts.slice(0, -1);
+
+  useHotkeys([{ key, handler, modifiers }], options);
+}
+
+export function useIsComposing(): boolean {
+  const [isComposing, setIsComposing] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleCompositionStart = () => setIsComposing(true);
+    const handleCompositionEnd = () => setIsComposing(false);
+
+    document.addEventListener("compositionstart", handleCompositionStart);
+    document.addEventListener("compositionend", handleCompositionEnd);
+
+    return () => {
+      document.removeEventListener("compositionstart", handleCompositionStart);
+      document.removeEventListener("compositionend", handleCompositionEnd);
+    };
+  }, []);
+
+  return isComposing;
 }

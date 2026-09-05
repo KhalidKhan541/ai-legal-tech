@@ -1,38 +1,54 @@
-"use client"
+import { useState, useEffect, useRef, useCallback } from "react";
 
-import { useState, useEffect } from "react"
-
-export function useDebounce<T>(value: T, delay: number = 500): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+export function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedValue(value)
-    }, delay)
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
 
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [value, delay])
-
-  return debouncedValue
+  return debouncedValue;
 }
 
-export function useDebouncedCallback<T extends (...args: any[]) => any>(
+export function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
   callback: T,
-  delay: number = 500
+  delay: number
 ): (...args: Parameters<T>) => void {
-  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callbackRef = useRef(callback);
 
-  return (...args: Parameters<T>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId)
-    }
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
-    const newTimeoutId = setTimeout(() => {
-      callback(...args)
-    }, delay)
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
-    setTimeoutId(newTimeoutId)
-  }
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      timerRef.current = setTimeout(() => {
+        callbackRef.current(...args);
+      }, delay);
+    },
+    [delay]
+  );
+}
+
+export function useDebouncedState<T>(
+  initialValue: T,
+  delay: number
+): [T, T, (value: T | ((prev: T) => T)) => void] {
+  const [value, setValue] = useState<T>(initialValue);
+  const debouncedValue = useDebounce(value, delay);
+
+  return [value, debouncedValue, setValue];
 }
