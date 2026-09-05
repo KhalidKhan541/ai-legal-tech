@@ -63,7 +63,7 @@ export interface TimeEntry {
   amount: number;
   status: TimeEntryStatus;
   isBillable: boolean;
-  is invoiced: boolean;
+  isInvoiced: boolean;
   invoiceId?: string;
   activityCode?: string;
   tags: string[];
