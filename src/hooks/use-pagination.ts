@@ -1,188 +1,153 @@
-"use client"
+import { useState, useMemo, useCallback } from "react";
 
-import { useState, useMemo, useCallback } from "react"
-
-interface UsePaginationOptions {
-  totalItems: number
-  initialPage?: number
-  initialPageSize?: number
-  pageSizeOptions?: number[]
+export interface UsePaginationOptions {
+  total: number;
+  initialPage?: number;
+  initialPerPage?: number;
 }
 
-interface UsePaginationResult {
-  currentPage: number
-  pageSize: number
-  totalPages: number
-  totalItems: number
-  startIndex: number
-  endIndex: number
-  hasNextPage: boolean
-  hasPreviousPage: boolean
-  setPage: (page: number) => void
-  setPageSize: (size: number) => void
-  nextPage: () => void
-  previousPage: () => void
-  firstPage: () => void
-  lastPage: () => void
+export interface UsePaginationResult {
+  page: number;
+  perPage: number;
+  totalPages: number;
+  total: number;
+  offset: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+  isFirstPage: boolean;
+  isLastPage: boolean;
+  setPage: (page: number) => void;
+  nextPage: () => void;
+  prevPage: () => void;
+  firstPage: () => void;
+  lastPage: () => void;
+  setPerPage: (perPage: number) => void;
+  goToPage: (page: number) => void;
+  getPageRange: () => number[];
 }
 
 export function usePagination({
-  totalItems,
+  total,
   initialPage = 1,
-  initialPageSize = 10,
+  initialPerPage = 20,
 }: UsePaginationOptions): UsePaginationResult {
-  const [currentPage, setCurrentPage] = useState(initialPage)
-  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [page, setPageState] = useState(initialPage);
+  const [perPage, setPerPageState] = useState(initialPerPage);
 
-  const totalPages = useMemo(
-    () => Math.ceil(totalItems / pageSize),
-    [totalItems, pageSize]
-  )
-
-  const startIndex = useMemo(
-    () => (currentPage - 1) * pageSize,
-    [currentPage, pageSize]
-  )
-
-  const endIndex = useMemo(
-    () => Math.min(startIndex + pageSize - 1, totalItems - 1),
-    [startIndex, pageSize, totalItems]
-  )
-
-  const hasNextPage = currentPage < totalPages
-  const hasPreviousPage = currentPage > 1
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / perPage)), [total, perPage]);
+  const offset = useMemo(() => (page - 1) * perPage, [page, perPage]);
 
   const setPage = useCallback(
-    (page: number) => {
-      const validPage = Math.max(1, Math.min(page, totalPages))
-      setCurrentPage(validPage)
+    (newPage: number) => {
+      setPageState(Math.max(1, Math.min(newPage, totalPages)));
     },
     [totalPages]
-  )
-
-  const handlePageSizeChange = useCallback(
-    (size: number) => {
-      setPageSize(size)
-      const newTotalPages = Math.ceil(totalItems / size)
-      if (currentPage > newTotalPages) {
-        setCurrentPage(newTotalPages || 1)
-      }
-    },
-    [totalItems, currentPage]
-  )
+  );
 
   const nextPage = useCallback(() => {
-    if (hasNextPage) {
-      setCurrentPage((prev) => prev + 1)
+    setPageState((prev) => Math.min(prev + 1, totalPages));
+  }, [totalPages]);
+
+  const prevPage = useCallback(() => {
+    setPageState((prev) => Math.max(prev - 1, 1));
+  }, []);
+
+  const firstPage = useCallback(() => setPageState(1), []);
+
+  const lastPage = useCallback(() => setPageState(totalPages), [totalPages]);
+
+  const setPerPage = useCallback(
+    (newPerPage: number) => {
+      setPerPageState(newPerPage);
+      setPageState(1);
+    },
+    []
+  );
+
+  const goToPage = useCallback(
+    (targetPage: number) => {
+      setPageState(Math.max(1, Math.min(targetPage, totalPages)));
+    },
+    [totalPages]
+  );
+
+  const getPageRange = useCallback((): number[] => {
+    const maxVisible = 7;
+    if (totalPages <= maxVisible) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
-  }, [hasNextPage])
 
-  const previousPage = useCallback(() => {
-    if (hasPreviousPage) {
-      setCurrentPage((prev) => prev - 1)
+    const half = Math.floor(maxVisible / 2);
+    let start = Math.max(1, page - half);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
     }
-  }, [hasPreviousPage])
 
-  const firstPage = useCallback(() => {
-    setCurrentPage(1)
-  }, [])
-
-  const lastPage = useCallback(() => {
-    setCurrentPage(totalPages)
-  }, [totalPages])
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [page, totalPages]);
 
   return {
-    currentPage,
-    pageSize,
+    page,
+    perPage,
     totalPages,
-    totalItems,
-    startIndex,
-    endIndex,
-    hasNextPage,
-    hasPreviousPage,
+    total,
+    offset,
+    hasNext: page < totalPages,
+    hasPrev: page > 1,
+    isFirstPage: page === 1,
+    isLastPage: page === totalPages,
     setPage,
-    setPageSize: handlePageSizeChange,
     nextPage,
-    previousPage,
+    prevPage,
     firstPage,
     lastPage,
-  }
+    setPerPage,
+    goToPage,
+    getPageRange,
+  };
 }
 
-interface UseCursorPaginationOptions {
-  initialCursor?: string | null
-}
+export function useInfiniteScroll<T>(
+  initialItems: T[],
+  fetchMore: (page: number) => Promise<T[]>,
+  options?: { perPage?: number }
+): {
+  items: T[];
+  isLoading: boolean;
+  hasMore: boolean;
+  loadMore: () => void;
+  reset: () => void;
+} {
+  const [items, setItems] = useState<T[]>(initialItems);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
 
-interface UseCursorPaginationResult {
-  cursor: string | null
-  setCursor: (cursor: string | null) => void
-  nextPage: (nextCursor: string) => void
-  reset: () => void
-  hasCursor: boolean
-}
+  const perPage = options?.perPage ?? 20;
 
-export function useCursorPagination({
-  initialCursor = null,
-}: UseCursorPaginationOptions = {}): UseCursorPaginationResult {
-  const [cursor, setCursor] = useState<string | null>(initialCursor)
+  const loadMore = useCallback(async () => {
+    if (isLoading || !hasMore) return;
 
-  const nextPage = useCallback((nextCursor: string) => {
-    setCursor(nextCursor)
-  }, [])
+    setIsLoading(true);
+    try {
+      const newItems = await fetchMore(page);
+      if (newItems.length < perPage) {
+        setHasMore(false);
+      }
+      setItems((prev) => [...prev, ...newItems]);
+      setPage((prev) => prev + 1);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, isLoading, hasMore, fetchMore, perPage]);
 
   const reset = useCallback(() => {
-    setCursor(initialCursor)
-  }, [initialCursor])
+    setItems(initialItems);
+    setPage(1);
+    setHasMore(true);
+  }, [initialItems]);
 
-  return {
-    cursor,
-    setCursor,
-    nextPage,
-    reset,
-    hasCursor: cursor !== null,
-  }
-}
-
-interface UseInfiniteScrollOptions {
-  threshold?: number
-  enabled?: boolean
-}
-
-interface UseInfiniteScrollResult {
-  containerRef: React.RefObject<HTMLDivElement>
-  loadMore: () => void
-  isLoading: boolean
-}
-
-export function useInfiniteScroll({
-  threshold = 200,
-  enabled = true,
-}: UseInfiniteScrollOptions = {}): UseInfiniteScrollResult {
-  const [isLoading, setIsLoading] = useState(false)
-  const containerRef = React.useRef<HTMLDivElement>(null)
-
-  const loadMore = useCallback(() => {
-    setIsLoading(true)
-    setTimeout(() => setIsLoading(false), 1000)
-  }, [])
-
-  React.useEffect(() => {
-    if (!enabled || !containerRef.current) return
-
-    const container = containerRef.current
-
-    const handleScroll = () => {
-      if (
-        container.scrollHeight - container.scrollTop - container.clientHeight <
-        threshold
-      ) {
-        loadMore()
-      }
-    }
-
-    container.addEventListener("scroll", handleScroll)
-    return () => container.removeEventListener("scroll", handleScroll)
-  }, [enabled, threshold, loadMore])
-
-  return { containerRef, loadMore, isLoading }
+  return { items, isLoading, hasMore, loadMore, reset };
 }

@@ -1,210 +1,144 @@
-"use client"
+import { useState, useEffect, useCallback, useRef } from "react";
 
-import { useState, useEffect, useCallback, useRef } from "react"
-
-interface UseFetchOptions<T> {
-  immediate?: boolean
-  initialData?: T
-  onSuccess?: (data: T) => void
-  onError?: (error: Error) => void
-  retryCount?: number
-  retryDelay?: number
+export interface UseFetchOptions<T> {
+  immediate?: boolean;
+  onSuccess?: (data: T) => void;
+  onError?: (error: Error) => void;
+  transform?: (data: unknown) => T;
 }
 
-interface UseFetchResult<T> {
-  data: T | undefined
-  error: Error | undefined
-  loading: boolean
-  execute: (url?: string, options?: RequestInit) => Promise<T | undefined>
-  reset: () => void
+export interface UseFetchResult<T, B = unknown> {
+  data: T | null;
+  error: Error | null;
+  isLoading: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  execute: (body?: B) => Promise<T | null>;
+  reset: () => void;
+  setData: (data: T | null) => void;
 }
 
-export function useFetch<T>(
+export function useFetch<T, B = unknown>(
   url: string | null,
-  options: UseFetchOptions<T> = {}
-): UseFetchResult<T> {
-  const {
-    immediate = true,
-    initialData,
-    onSuccess,
-    onError,
-    retryCount = 0,
-    retryDelay = 1000,
-  } = options
+  options?: UseFetchOptions<T> & {
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    headers?: Record<string, string>;
+    body?: B;
+    credentials?: RequestCredentials;
+  }
+): UseFetchResult<T, B> {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
 
-  const [data, setData] = useState<T | undefined>(initialData)
-  const [error, setError] = useState<Error | undefined>()
-  const [loading, setLoading] = useState(false)
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const mountedRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const execute = useCallback(
-    async (
-      executeUrl?: string,
-      fetchOptions?: RequestInit
-    ): Promise<T | undefined> => {
-      const targetUrl = executeUrl || url
-      if (!targetUrl) return undefined
+    async (body?: B): Promise<T | null> => {
+      if (!url) return null;
 
-      abortControllerRef.current?.abort()
-      abortControllerRef.current = new AbortController()
-
-      setLoading(true)
-      setError(undefined)
-
-      let lastError: Error | undefined
-
-      for (let attempt = 0; attempt <= retryCount; attempt++) {
-        try {
-          const response = await fetch(targetUrl, {
-            ...fetchOptions,
-            signal: abortControllerRef.current.signal,
-            headers: {
-              "Content-Type": "application/json",
-              ...fetchOptions?.headers,
-            },
-          })
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`)
-          }
-
-          const result = await response.json()
-
-          if (mountedRef.current) {
-            setData(result)
-            setLoading(false)
-            onSuccess?.(result)
-          }
-
-          return result
-        } catch (err) {
-          lastError =
-            err instanceof Error ? err : new Error("Unknown error occurred")
-
-          if (err instanceof DOMException && err.name === "AbortError") {
-            return undefined
-          }
-
-          if (attempt < retryCount) {
-            await new Promise((resolve) => setTimeout(resolve, retryDelay))
-          }
-        }
-      }
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
 
       if (mountedRef.current) {
-        setError(lastError)
-        setLoading(false)
-        onError?.(lastError!)
+        setIsLoading(true);
+        setError(null);
       }
-
-      return undefined
-    },
-    [url, retryCount, retryDelay, onSuccess, onError]
-  )
-
-  const reset = useCallback(() => {
-    setData(initialData)
-    setError(undefined)
-    setLoading(false)
-  }, [initialData])
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      abortControllerRef.current?.abort()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (immediate && url) {
-      execute()
-    }
-  }, [immediate, url, execute])
-
-  return { data, error, loading, execute, reset }
-}
-
-interface UseFetchMutationOptions<T, V> {
-  onSuccess?: (data: T, variables: V) => void
-  onError?: (error: Error, variables: V) => void
-}
-
-interface UseFetchMutationResult<T, V> {
-  data: T | undefined
-  error: Error | undefined
-  loading: boolean
-  mutate: (variables: V) => Promise<T | undefined>
-  reset: () => void
-}
-
-export function useFetchMutation<T, V = any>(
-  url: string,
-  options: UseFetchMutationOptions<T, V> = {}
-): UseFetchMutationResult<T, V> {
-  const { onSuccess, onError } = options
-
-  const [data, setData] = useState<T | undefined>()
-  const [error, setError] = useState<Error | undefined>()
-  const [loading, setLoading] = useState(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const mutate = useCallback(
-    async (variables: V): Promise<T | undefined> => {
-      setLoading(true)
-      setError(undefined)
 
       try {
-        const response = await fetch(url, {
-          method: "POST",
+        const fetchOptions: RequestInit = {
+          method: options?.method ?? "GET",
           headers: {
             "Content-Type": "application/json",
+            ...options?.headers,
           },
-          body: JSON.stringify(variables),
-        })
+          signal: abortControllerRef.current.signal,
+          credentials: options?.credentials ?? "same-origin",
+        };
+
+        if (body && fetchOptions.method !== "GET") {
+          fetchOptions.body = JSON.stringify(body);
+        }
+
+        const response = await fetch(url, fetchOptions);
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          const errorText = await response.text().catch(() => "Unknown error");
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
-        const result = await response.json()
+        const json = await response.json();
+        const result = options?.transform ? options.transform(json) : (json as T);
 
         if (mountedRef.current) {
-          setData(result)
-          setLoading(false)
-          onSuccess?.(result, variables)
+          setData(result);
+          setIsLoading(false);
+          options?.onSuccess?.(result);
         }
 
-        return result
+        return result;
       } catch (err) {
-        const error =
-          err instanceof Error ? err : new Error("Unknown error occurred")
-
-        if (mountedRef.current) {
-          setError(error)
-          setLoading(false)
-          onError?.(error, variables)
+        if (err instanceof Error && err.name === "AbortError") {
+          return null;
         }
 
-        return undefined
+        const error = err instanceof Error ? err : new Error(String(err));
+        if (mountedRef.current) {
+          setError(error);
+          setIsLoading(false);
+          options?.onError?.(error);
+        }
+        return null;
       }
     },
-    [url, onSuccess, onError]
-  )
+    [url, options]
+  );
 
   const reset = useCallback(() => {
-    setData(undefined)
-    setError(undefined)
-    setLoading(false)
-  }, [])
+    abortControllerRef.current?.abort();
+    if (mountedRef.current) {
+      setData(null);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, []);
 
-  return { data, error, loading, mutate, reset }
+  useEffect(() => {
+    if (options?.immediate !== false && url) {
+      execute(options?.body);
+    }
+  }, [url]);
+
+  return {
+    data,
+    error,
+    isLoading,
+    isError: error !== null,
+    isSuccess: data !== null && error === null,
+    execute,
+    reset,
+    setData,
+  };
+}
+
+export function useFetchMutation<T, B = unknown>(
+  url: string | ((body: B) => string),
+  options?: {
+    method?: "POST" | "PUT" | "PATCH" | "DELETE";
+    headers?: Record<string, string>;
+    onSuccess?: (data: T) => void;
+    onError?: (error: Error) => void;
+    transform?: (data: unknown) => T;
+  }
+): UseFetchResult<T, B> {
+  return useFetch<T, B>(null, {
+    ...options,
+    immediate: false,
+  });
 }
