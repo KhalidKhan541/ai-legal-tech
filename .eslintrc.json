@@ -1,0 +1,63 @@
+{
+  "root": true,
+  "extends": [
+    "eslint:recommended",
+    "next/core-web-vitals",
+    "next/typescript",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/consistent-type-imports": [
+      "warn",
+      {
+        "prefer": "type-imports"
+      }
+    ],
+    "react-hooks/exhaustive-deps": "warn",
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error"]
+      }
+    ],
+    "prefer-const": "error",
+    "no-var": "error",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-duplicate-imports": "error",
+    "no-shadow": "off",
+    "@typescript-eslint/no-shadow": "error"
+  },
+  "overrides": [
+    {
+      "files": ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["*.js", "*.jsx"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "coverage/",
+    "dist/",
+    "build/",
+    "*.config.js",
+    "*.config.mjs",
+    "*.config.ts"
+  ]
+}
