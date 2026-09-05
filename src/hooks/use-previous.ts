@@ -1,60 +1,109 @@
-"use client"
-
-import { useEffect, useRef } from "react"
+import { useRef, useEffect, useState } from "react";
 
 export function usePrevious<T>(value: T): T | undefined {
-  const ref = useRef<T | undefined>(undefined)
+  const ref = useRef<T | undefined>(undefined);
 
   useEffect(() => {
-    ref.current = value
-  }, [value])
+    ref.current = value;
+  }, [value]);
 
-  return ref.current
+  return ref.current;
 }
 
-export function usePreviousDistinct<T>(
-  value: T,
-  compare?: (a: T, b: T) => boolean
-): T | undefined {
-  const ref = useRef<T | undefined>(undefined)
-  const currentRef = useRef<T>(value)
+export function useDeepCompareEffect(
+  effect: React.EffectCallback,
+  deps: unknown[]
+): void {
+  const prevDepsRef = useRef<unknown[]>(deps);
+  const { current: prevDeps } = prevDepsRef;
+
+  const hasChanged = deps.length !== prevDeps.length ||
+    deps.some((dep, i) => !Object.is(dep, prevDeps[i]));
 
   useEffect(() => {
-    if (compare) {
-      if (!compare(currentRef.current, value)) {
-        ref.current = currentRef.current
-        currentRef.current = value
-      }
-    } else {
-      if (currentRef.current !== value) {
-        ref.current = currentRef.current
-        currentRef.current = value
-      }
+    if (hasChanged) {
+      prevDepsRef.current = deps;
+      return effect();
     }
-  }, [value, compare])
-
-  return ref.current
+  }, [hasChanged]);
 }
 
-export function usePreviousWithIndex<T>(value: T): [T | undefined, number] {
-  const ref = useRef<{ value: T | undefined; index: number }>({
-    value: undefined,
-    index: 0,
-  })
+export function useDeepCompareMemo<T>(factory: () => T, deps: unknown[]): T {
+  const ref = useRef<{ deps: unknown[]; value: T }>({ deps, value: undefined as T });
+  const { current } = ref;
 
-  useEffect(() => {
-    ref.current = { value, index: ref.current.index + 1 }
-  }, [value])
+  const hasChanged = deps.length !== current.deps.length ||
+    deps.some((dep, i) => !Object.is(dep, current.deps[i]));
 
-  return [ref.current.value, ref.current.index]
+  if (hasChanged) {
+    current.deps = deps;
+    current.value = factory();
+  }
+
+  return current.value;
 }
 
-export function usePreviousChanges<T>(value: T, maxHistory: number = 5): T[] {
-  const historyRef = useRef<T[]>([])
+export function useIsFirstRender(): boolean {
+  const isFirstRef = useRef(true);
 
   useEffect(() => {
-    historyRef.current = [value, ...historyRef.current].slice(0, maxHistory)
-  }, [value, maxHistory])
+    isFirstRef.current = false;
+  }, []);
 
-  return historyRef.current
+  return isFirstRef.current;
+}
+
+export function useIsMounted(): boolean {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
+
+  return isMounted;
+}
+
+export function useLatest<T>(value: T): React.RefObject<T> {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+export function useMount(callback: () => void): void {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  useEffect(() => {
+    callbackRef.current();
+  }, []);
+}
+
+export function useUnmount(callback: () => void): void {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  useEffect(() => {
+    return () => callbackRef.current();
+  }, []);
+}
+
+export function useUpdateEffect(
+  effect: React.EffectCallback,
+  deps?: React.DependencyList
+): void {
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    return effect();
+  }, deps);
+}
+
+export function useRerender(): () => void {
+  const [, setCount] = useState(0);
+  return () => setCount((c) => c + 1);
 }
